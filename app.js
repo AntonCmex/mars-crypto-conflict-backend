@@ -11,23 +11,35 @@ const gameRoutes = require('./routes/game');
 const walletRoutes = require('./routes/wallet');
 
 // Middleware
-const { verifyTelegramWebAppData, mockTelegramAuth } = require('./middleware/auth');
-const { validateRequest, validateRequiredFields } = require('./middleware/validation');
+const { verifyTelegramWebAppData, mockTelegramAuth, simpleAuth } = require('./middleware/auth');
 
 // Создаем Express приложение
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ========== КОНФИГУРАЦИЯ ==========
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const USE_MOCK_AUTH = NODE_ENV === 'development'; // В разработке используем mock авторизацию
+const NODE_ENV = process.env.NODE_ENV || 'production';
+const USE_MOCK_AUTH = process.env.USE_MOCK_AUTH === 'true';
+const DISABLE_AUTH = process.env.DISABLE_AUTH === 'true';
+
+console.log('='.repeat(50));
+console.log('🚀 Mars Crypto Conflict Server');
+console.log('='.repeat(50));
+console.log(`📡 Режим: ${NODE_ENV}`);
+console.log(`🔐 MOCK Auth: ${USE_MOCK_AUTH ? 'ON' : 'OFF'}`);
+console.log(`🔓 Auth disabled: ${DISABLE_AUTH ? 'YES' : 'NO'}`);
+console.log(`🕐 Запуск: ${new Date().toLocaleString()}`);
 
 // ========== MIDDLEWARE ==========
 // Разрешаем запросы с других доменов (для фронтенда)
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Telegram-User-ID', 'X-Test-Mode']
+}));
 
 // Парсим JSON данные из запросов
-app.use(express.json({ limit: '10mb' })); // Увеличиваем лимит для сохранения зданий
+app.use(express.json({ limit: '10mb' }));
 
 // Парсим URL-encoded данные
 app.use(express.urlencoded({ extended: true }));
@@ -36,9 +48,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   
-  // Логируем body для POST запросов (кроме чувствительных данных)
-  if (req.method === 'POST' && !req.url.includes('/wallet/save')) {
-    console.log('Body:', JSON.stringify(req.body).substring(0, 200) + '...');
+  // Логируем заголовки авторизации
+  if (req.headers['authorization'] || req.headers['x-telegram-user-id']) {
+    console.log('  Auth headers:', {
+      auth: req.headers['authorization'] ? 'present' : 'missing',
+      telegramId: req.headers['x-telegram-user-id'] || 'none',
+      testMode: req.headers['x-test-mode'] || 'none'
+    });
   }
   
   next();
@@ -51,33 +67,16 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: '🚀 Mars Crypto Conflict API работает!',
-    version: '1.0.0',
+    version: '2.0.0',
     timestamp: new Date().toISOString(),
     environment: NODE_ENV,
-    documentation: {
-      user: {
-        me: 'GET /api/user/me - данные пользователя',
-        create: 'POST /api/user/create - создать пользователя (dev)',
-        stats: 'GET /api/user/stats - статистика пользователя'
-      },
-      game: {
-        state: 'GET /api/game/state - состояние игры',
-        buildings: 'GET /api/game/buildings - здания пользователя',
-        save_buildings: 'POST /api/game/buildings/save - сохранить здания',
-        move_building: 'POST /api/game/buildings/move - переместить здание',
-        collect: 'POST /api/game/collect - собрать ресурсы'
-      },
-      wallet: {
-        save: 'POST /api/wallet/save - сохранить BSC адрес',
-        withdraw: 'POST /api/wallet/withdraw - вывод средств',
-        transactions: 'GET /api/wallet/transactions - история транзакций',
-        info: 'GET /api/wallet/info - информация о кошельке',
-        leaderboard: 'GET /api/wallet/leaderboard - таблица лидеров'
-      },
-      system: {
-        health: 'GET /api/health - проверка здоровья системы',
-        test: 'GET /api/test - тестовый эндпоинт'
-      }
+    auth_mode: DISABLE_AUTH ? 'disabled' : (USE_MOCK_AUTH ? 'mock' : 'telegram'),
+    endpoints: {
+      health: '/api/health',
+      test: '/api/test',
+      user: '/api/user/me',
+      game: '/api/game/state',
+      wallet: '/api/wallet/info'
     }
   });
 });
@@ -97,14 +96,15 @@ app.get('/api/health', async (req, res) => {
       server: {
         timestamp: new Date().toISOString(),
         environment: NODE_ENV,
+        auth_mode: DISABLE_AUTH ? 'disabled' : (USE_MOCK_AUTH ? 'mock' : 'telegram'),
         uptime: process.uptime() + ' seconds',
-        port: PORT,
-        auth_mode: USE_MOCK_AUTH ? 'mock' : 'telegram'
+        port: PORT
       },
       database: dbTest,
       services: {
         postgres: dbTest.connected ? 'operational' : 'down',
-        api: 'operational'
+        api: 'operational',
+        auth: DISABLE_AUTH ? 'disabled' : 'enabled'
       }
     };
     
@@ -131,28 +131,50 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/test', (req, res) => {
   res.json({
     success: true,
-    message: 'Тестовый эндпоинт работает!',
+    message: '✅ Тестовый эндпоинт работает!',
     data: {
       game: 'Mars Crypto Conflict',
       token: 'MNRT',
       blockchain: 'BSC',
-      api_version: '1.0.0'
+      api_version: '2.0.0',
+      auth_required: !DISABLE_AUTH
     }
   });
 });
 
-// ========== ОСНОВНЫЕ МАРШРУТЫ API ==========
+// ========== ВЫБОР СИСТЕМЫ АВТОРИЗАЦИИ ==========
 
-// API для пользователей
-app.use('/api/user', userRoutes);
+console.log('\n🔐 Настройка системы авторизации...');
 
-// API для игры (требует авторизацию)
-if (USE_MOCK_AUTH) {
-  console.log('🔓 Используется MOCK авторизация (режим разработки)');
+if (DISABLE_AUTH) {
+  console.log('🔓 АВТОРИЗАЦИЯ ОТКЛЮЧЕНА - все запросы разрешены');
+  
+  // Простая заглушка для user
+  app.use('/api/user', (req, res, next) => {
+    req.telegramUser = {
+      id: req.headers['x-telegram-user-id'] || Date.now(),
+      first_name: 'Test',
+      last_name: 'User',
+      username: 'test_user'
+    };
+    next();
+  }, userRoutes);
+  
+  // Для game и wallet используем simpleAuth
+  app.use('/api/game', simpleAuth, gameRoutes);
+  app.use('/api/wallet', simpleAuth, walletRoutes);
+  
+} else if (USE_MOCK_AUTH) {
+  console.log('🎭 Используется MOCK авторизация');
+  
+  app.use('/api/user', mockTelegramAuth, userRoutes);
   app.use('/api/game', mockTelegramAuth, gameRoutes);
   app.use('/api/wallet', mockTelegramAuth, walletRoutes);
+  
 } else {
   console.log('🔐 Используется Telegram Web App авторизация');
+  
+  app.use('/api/user', verifyTelegramWebAppData, userRoutes);
   app.use('/api/game', verifyTelegramWebAppData, gameRoutes);
   app.use('/api/wallet', verifyTelegramWebAppData, walletRoutes);
 }
@@ -182,32 +204,16 @@ app.use((err, req, res, next) => {
 
 // ========== ЗАПУСК СЕРВЕРА ==========
 app.listen(PORT, () => {
+  console.log('\n' + '='.repeat(50));
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log('='.repeat(50));
-  console.log('🚀 Mars Crypto Conflict Server запущен!');
-  console.log('='.repeat(50));
-  console.log(`📡 Порт: ${PORT}`);
-  console.log(`🌐 Режим: ${NODE_ENV}`);
-  console.log(`🔐 Авторизация: ${USE_MOCK_AUTH ? 'MOCK (разработка)' : 'Telegram Web App'}`);
-  console.log(`🕐 Время запуска: ${new Date().toLocaleString()}`);
-  console.log('');
   console.log('🔗 Доступные URL:');
   console.log(`   • Главная: http://localhost:${PORT}`);
   console.log(`   • Здоровье: http://localhost:${PORT}/api/health`);
   console.log(`   • Тест: http://localhost:${PORT}/api/test`);
   console.log('');
-  console.log('📋 Документация API доступна на главной странице');
-  console.log('');
   console.log('⚡ Для остановки сервера нажми Ctrl+C');
   console.log('='.repeat(50));
-});
-
-// Обработка ошибок сервера
-process.on('uncaughtException', (error) => {
-  console.error('❌ Необработанная ошибка:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Необработанный промис:', reason);
 });
 
 // Экспортируем app для тестов
