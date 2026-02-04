@@ -9,11 +9,31 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
  */
 const verifyTelegramWebAppData = (req, res, next) => {
   try {
+    console.log('[Auth] Attempting Telegram authentication...');
+    
     // 1. Получаем initData из запроса
-    let initData = req.headers['x-telegram-init-data'] || req.query.initData;
+    let initData = req.headers['authorization']?.replace('tma ', '') || 
+                   req.headers['x-telegram-init-data'] || 
+                   req.query.initData;
     
     if (!initData) {
       console.warn('[Auth] No Telegram initData provided');
+      
+      // Проверяем тестовый режим
+      const testUserId = req.headers['x-telegram-user-id'];
+      if (testUserId && process.env.NODE_ENV === 'development') {
+        console.log(`[Auth] Using test mode with user ID: ${testUserId}`);
+        req.telegramUser = {
+          id: parseInt(testUserId),
+          first_name: 'Test',
+          last_name: 'User',
+          username: 'test_user',
+          language_code: 'ru'
+        };
+        req.isTelegramAuth = true;
+        return next();
+      }
+      
       return res.status(401).json({ 
         success: false, 
         error: 'Telegram authentication required' 
@@ -97,15 +117,50 @@ const verifyTelegramWebAppData = (req, res, next) => {
 const mockTelegramAuth = (req, res, next) => {
   console.log('[Auth] Using mock authentication (development mode)');
   
+  // Получаем Telegram ID из заголовков или используем тестовый
+  const telegramId = req.headers['x-telegram-user-id'] || 
+                     req.headers['x-telegram-user-id'] || 
+                     '123456789';
+  
+  const username = req.headers['x-telegram-username'] || 'test_user';
+  const firstName = req.headers['x-telegram-first-name'] || 'Test';
+  const lastName = req.headers['x-telegram-last-name'] || 'User';
+  
   // Тестовые данные пользователя
   req.telegramUser = {
-    id: 123456789,
-    first_name: 'Test',
-    last_name: 'User',
-    username: 'test_user',
+    id: parseInt(telegramId) || 123456789,
+    first_name: firstName,
+    last_name: lastName,
+    username: username,
     language_code: 'ru',
     is_premium: true
   };
+  
+  console.log(`[Auth] Mock user authenticated: ${req.telegramUser.id} (@${req.telegramUser.username})`);
+  
+  req.isTelegramAuth = true;
+  next();
+};
+
+/**
+ * Простой middleware для тестирования - принимает любой запрос
+ */
+const simpleAuth = (req, res, next) => {
+  console.log('[Auth] Using simple authentication (no verification)');
+  
+  // Получаем Telegram ID из заголовков или генерируем
+  const telegramId = req.headers['x-telegram-user-id'] || 
+                     `test_${Date.now()}`;
+  
+  req.telegramUser = {
+    id: parseInt(telegramId) || Date.now(),
+    first_name: 'Test',
+    last_name: 'User',
+    username: 'test_user',
+    language_code: 'ru'
+  };
+  
+  console.log(`[Auth] Simple auth - User ID: ${req.telegramUser.id}`);
   
   req.isTelegramAuth = true;
   next();
@@ -113,5 +168,6 @@ const mockTelegramAuth = (req, res, next) => {
 
 module.exports = {
   verifyTelegramWebAppData,
-  mockTelegramAuth
+  mockTelegramAuth,
+  simpleAuth
 };
