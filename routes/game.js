@@ -5,6 +5,103 @@ const GameService = require('../services/GameService');
 const Building = require('../models/Building');
 const { validateRequiredFields } = require('../middleware/validation');
 
+// ==================== НОВЫЙ ЭНДПОИНТ ДЛЯ СОЗДАНИЯ ТАБЛИЦ ====================
+/**
+ * @route   POST /api/game/init-db
+ * @desc    Создать таблицы в базе данных (временный эндпоинт)
+ * @access  Public
+ */
+router.post('/init-db', async (req, res) => {
+  try {
+    const db = require('../config/database');
+    
+    console.log('🔄 Начинаю создание таблиц в базе данных...');
+    
+    // 1. Таблица users
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        telegram_id VARCHAR(100) UNIQUE NOT NULL,
+        username VARCHAR(100),
+        first_name VARCHAR(100),
+        wallet_address VARCHAR(100),
+        game_balance DECIMAL(20, 8) DEFAULT 100.0,
+        base_storage DECIMAL(20, 8) DEFAULT 0.0,
+        total_mined DECIMAL(20, 8) DEFAULT 0.0,
+        last_collect TIMESTAMP DEFAULT NOW(),
+        last_withdrawal TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица users создана');
+    
+    // 2. Таблица buildings
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS buildings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        level INTEGER DEFAULT 1,
+        x_coordinate INTEGER,
+        y_coordinate INTEGER,
+        efficiency DECIMAL(10, 4) DEFAULT 1.0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица buildings создана');
+    
+    // 3. Таблица transactions
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        amount DECIMAL(20, 8) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица transactions создана');
+    
+    // 4. Таблица game_logs
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS game_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        action VARCHAR(100) NOT NULL,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица game_logs создана');
+    
+    // 5. Тестовый пользователь
+    await db.query(`
+      INSERT INTO users (telegram_id, username, game_balance, base_storage) 
+      VALUES ('test123', 'test_user', 100.0, 50.0)
+      ON CONFLICT (telegram_id) DO NOTHING
+    `);
+    console.log('✅ Тестовый пользователь создан');
+    
+    res.json({ 
+      success: true, 
+      message: '✅ Все таблицы созданы успешно!',
+      tables: ['users', 'buildings', 'transactions', 'game_logs']
+    });
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания таблиц:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      details: 'Проверьте подключение к БД'
+    });
+  }
+});
+// ==================== КОНЕЦ НОВОГО ЭНДПОИНТА ====================
+
 /**
  * @route   GET /api/game/buildings
  * @desc    Получить все здания пользователя
