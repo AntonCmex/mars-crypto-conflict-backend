@@ -185,22 +185,37 @@ const initializeDatabase = async () => {
     console.log('\n🔧 Инициализация базы данных...');
     const db = require('./config/database');
     
-    // 1. Таблица пользователей (минимальная версия для начала)
+    // 1. Таблица пользователей (ПОЛНАЯ версия с updated_at)
     await db.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         telegram_id VARCHAR(100) UNIQUE NOT NULL,
         username VARCHAR(100),
+        first_name VARCHAR(100),
+        wallet_address VARCHAR(100),
         game_balance DECIMAL(20, 8) DEFAULT 100.0,
         base_storage DECIMAL(20, 8) DEFAULT 50.0,
         total_mined DECIMAL(20, 8) DEFAULT 0.0,
         last_collect TIMESTAMP DEFAULT NOW(),
-        created_at TIMESTAMP DEFAULT NOW()
+        last_withdrawal TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
     console.log('✅ Таблица users создана');
     
-    // 2. Тестовый пользователь
+    // 2. Добавляем колонку updated_at если она не добавилась автоматически
+    try {
+      await db.query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
+      `);
+      console.log('✅ Колонка updated_at проверена');
+    } catch (alterError) {
+      console.log('ℹ️  Колонка updated_at уже существует');
+    }
+    
+    // 3. Тестовый пользователь
     await db.query(`
       INSERT INTO users (telegram_id, username, game_balance, base_storage) 
       VALUES ('test123', 'test_user', 100.0, 50.0)
@@ -208,7 +223,7 @@ const initializeDatabase = async () => {
     `);
     console.log('✅ Тестовый пользователь: test123');
     
-    // 3. Проверяем что все работает
+    // 4. Проверяем что все работает
     const result = await db.query("SELECT COUNT(*) as user_count FROM users");
     console.log(`✅ База данных готова! Пользователей: ${result.rows[0].user_count}`);
     
@@ -220,6 +235,63 @@ const initializeDatabase = async () => {
 
 // Запускаем инициализацию через 3 секунды после старта сервера
 setTimeout(initializeDatabase, 3000);
+
+// ========== ДОПОЛНИТЕЛЬНЫЕ ТАБЛИЦЫ ЧЕРЕЗ 5 СЕКУНД ==========
+const initializeAdditionalTables = async () => {
+  try {
+    console.log('\n🔧 Создание дополнительных таблиц...');
+    const db = require('./config/database');
+    
+    // 1. Таблица зданий
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS buildings (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        level INTEGER DEFAULT 1,
+        x_coordinate INTEGER,
+        y_coordinate INTEGER,
+        efficiency DECIMAL(10, 4) DEFAULT 1.0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица buildings создана');
+    
+    // 2. Таблица транзакций
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        amount DECIMAL(20, 8) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица transactions создана');
+    
+    // 3. Таблица логов игры
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS game_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        action VARCHAR(100) NOT NULL,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица game_logs создана');
+    
+    console.log('🎯 Все таблицы базы данных готовы к работе!');
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания дополнительных таблиц:', error.message);
+  }
+};
+
+// Запускаем создание дополнительных таблиц через 5 секунд
+setTimeout(initializeAdditionalTables, 5000);
 
 // ========== ОБРАБОТКА ОШИБОК ==========
 
