@@ -179,6 +179,48 @@ if (DISABLE_AUTH) {
   app.use('/api/wallet', verifyTelegramWebAppData, walletRoutes);
 }
 
+// ========== АВТОМАТИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ ==========
+const initializeDatabase = async () => {
+  try {
+    console.log('\n🔧 Инициализация базы данных...');
+    const db = require('./config/database');
+    
+    // 1. Таблица пользователей (минимальная версия для начала)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        telegram_id VARCHAR(100) UNIQUE NOT NULL,
+        username VARCHAR(100),
+        game_balance DECIMAL(20, 8) DEFAULT 100.0,
+        base_storage DECIMAL(20, 8) DEFAULT 50.0,
+        total_mined DECIMAL(20, 8) DEFAULT 0.0,
+        last_collect TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Таблица users создана');
+    
+    // 2. Тестовый пользователь
+    await db.query(`
+      INSERT INTO users (telegram_id, username, game_balance, base_storage) 
+      VALUES ('test123', 'test_user', 100.0, 50.0)
+      ON CONFLICT (telegram_id) DO NOTHING
+    `);
+    console.log('✅ Тестовый пользователь: test123');
+    
+    // 3. Проверяем что все работает
+    const result = await db.query("SELECT COUNT(*) as user_count FROM users");
+    console.log(`✅ База данных готова! Пользователей: ${result.rows[0].user_count}`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка инициализации БД:', error.message);
+    console.log('⚠️  Игра будет работать в тестовом режиме');
+  }
+};
+
+// Запускаем инициализацию через 3 секунды после старта сервера
+setTimeout(initializeDatabase, 3000);
+
 // ========== ОБРАБОТКА ОШИБОК ==========
 
 // Обработка 404 ошибок (не найденные маршруты)
