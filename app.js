@@ -35,8 +35,21 @@ console.log(`🕐 Запуск: ${new Date().toLocaleString()}`);
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Telegram-User-ID', 'X-Test-Mode']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Telegram-User-ID', 
+    'X-Test-Mode',
+    'X-Client',  // ✅ ДОБАВИТЬ ЭТО
+    'Access-Control-Allow-Origin',  // ✅ ДОБАВИТЬ ЭТО
+    'Access-Control-Allow-Headers'  // ✅ ДОБАВИТЬ ЭТО
+  ],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true  // ✅ ДОБАВИТЬ ЭТО
 }));
+
+// ✅ ЭТА СТРОКА ДОБАВЛЕНА
+app.options('*', cors());
 
 // Парсим JSON данные из запросов
 app.use(express.json({ limit: '10mb' }));
