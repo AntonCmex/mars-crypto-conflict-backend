@@ -205,17 +205,20 @@ const initializeDatabase = async () => {
         telegram_id VARCHAR(100) UNIQUE NOT NULL,
         username VARCHAR(100),
         first_name VARCHAR(100),
+        last_name VARCHAR(100),
         wallet_address VARCHAR(100),
         game_balance DECIMAL(20, 8) DEFAULT 100.0,
         base_storage DECIMAL(20, 8) DEFAULT 50.0,
         total_mined DECIMAL(20, 8) DEFAULT 0.0,
+        energy_production INTEGER DEFAULT 0,
+        energy_consumption INTEGER DEFAULT 0,
         last_collect TIMESTAMP DEFAULT NOW(),
         last_withdrawal TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
-    `);
-    console.log('✅ Таблица users создана');
+`    );
+    console.log('✅ Таблица users создана (полная версия)');
     
     // 2. Добавляем колонку updated_at если она не добавилась автоматически
     try {
