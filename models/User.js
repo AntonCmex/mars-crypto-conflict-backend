@@ -26,23 +26,19 @@ class User {
   static async create(telegramUser) {
     const query = `
       INSERT INTO users (
-        telegram_id, username, first_name,
+        telegram_id, username, 
         game_balance, base_storage, total_mined,
-        energy_production, energy_consumption,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
       RETURNING *
     `;
     
     const values = [
       telegramUser.id,
       telegramUser.username || null,
-      telegramUser.first_name || '',
       0.0, // game_balance
       0.0, // base_storage
       0.0, // total_mined
-      0,   // energy_production
-      0    // energy_consumption
     ];
     
     const result = await db.query(query, values);
