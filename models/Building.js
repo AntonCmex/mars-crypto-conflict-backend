@@ -27,7 +27,7 @@ class Building {
     const query = `
       INSERT INTO buildings (
         user_id, type, level, x_coordinate, y_coordinate,
-        efficiency, created_at  // ← УБРАЛИ upgraded_at
+        efficiency, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING *
     `;
