@@ -269,6 +269,7 @@ const initializeAdditionalTables = async () => {
         y_coordinate INTEGER,
         efficiency DECIMAL(10, 4) DEFAULT 1.0,
         created_at TIMESTAMP DEFAULT NOW()
+        upgraded_at TIMESTAMP DEFAULT NOW()
       )
     `);
     console.log('✅ Таблица buildings создана');
