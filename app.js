@@ -231,7 +231,34 @@ const initializeDatabase = async () => {
       console.log('ℹ️  Колонка updated_at уже существует');
     }
     
-    // 3. Тестовый пользователь
+    // 3. ДОБАВЬТЕ ЭТОТ БЛОК - проверяем и добавляем колонку upgraded_at в buildings
+    try {
+      // Сначала создаем таблицу buildings если её нет
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS buildings (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          type VARCHAR(50) NOT NULL,
+          level INTEGER DEFAULT 1,
+          x_coordinate INTEGER,
+          y_coordinate INTEGER,
+          efficiency DECIMAL(10, 4) DEFAULT 1.0,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      console.log('✅ Таблица buildings создана/проверена');
+      
+      // Теперь добавляем колонку upgraded_at если её нет
+      await db.query(`
+        ALTER TABLE buildings 
+        ADD COLUMN IF NOT EXISTS upgraded_at TIMESTAMP DEFAULT NOW()
+      `);
+      console.log('✅ Колонка upgraded_at проверена/добавлена');
+    } catch (alterError) {
+      console.log('ℹ️  Ошибка с buildings таблицей:', alterError.message);
+    }
+    
+    // 4. Тестовый пользователь
     await db.query(`
       INSERT INTO users (telegram_id, username, game_balance, base_storage) 
       VALUES ('test123', 'test_user', 100.0, 50.0)
@@ -239,7 +266,7 @@ const initializeDatabase = async () => {
     `);
     console.log('✅ Тестовый пользователь: test123');
     
-    // 4. Проверяем что все работает
+    // 5. Проверяем что все работает
     const result = await db.query("SELECT COUNT(*) as user_count FROM users");
     console.log(`✅ База данных готова! Пользователей: ${result.rows[0].user_count}`);
     
